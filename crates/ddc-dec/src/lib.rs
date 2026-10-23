@@ -249,8 +249,9 @@ pub struct DexPool {
     /// single-class path then falls back to a full parse instead of
     /// emitting degraded types.
     name_only_missed: std::sync::atomic::AtomicBool,
-    /// First NameOnly class the renderer asked for (diagnostics/fallback).
-    name_only_miss: std::sync::Mutex<Option<String>>,
+    /// Every NameOnly class the renderer asked for (drives on-demand image
+    /// loading in the two-tier path; the first also serves diagnostics).
+    name_only_miss: std::sync::Mutex<Vec<String>>,
     /// Synthetic-static accessor code snapshots keyed by (dex_idx,
     /// code_off). `inline_accessors` reads accessor bodies ACROSS images
     /// during worker runs; image retirement can release those bytes
@@ -324,7 +325,7 @@ impl DexPool {
             children: std::sync::OnceLock::new(),
             ref_caches: Vec::new(),
             name_only_missed: std::sync::atomic::AtomicBool::new(false),
-            name_only_miss: std::sync::Mutex::new(None),
+            name_only_miss: std::sync::Mutex::new(Vec::new()),
             accessor_code: std::sync::OnceLock::new(),
             pkg_simples: std::sync::OnceLock::new(),
             root_segs: std::sync::OnceLock::new(),
@@ -511,6 +512,13 @@ impl DexPool {
     }
 
     pub fn add_dex_lazy(&mut self, dex: DexFile) -> usize {
+        self.add_dex_lazy_arc(std::sync::Arc::new(dex))
+    }
+
+    /// Lazy registration from a shared image. The two-tier single-class
+    /// path rebuilds its pool after loading additional images; keeping the
+    /// parsed image in an Arc avoids re-parsing it on every round.
+    pub fn add_dex_lazy_arc(&mut self, dex: std::sync::Arc<DexFile>) -> usize {
         let dex_idx = self.dexes.len();
         self.classes.reserve(dex.class_defs.len());
         for (ci, cd) in dex.class_defs.iter().enumerate() {
@@ -529,7 +537,7 @@ impl DexPool {
         }
         self.ref_caches
             .push(DexRefCache::new(dex.proto_count(), dex.type_count()));
-        self.dexes.push(std::sync::Arc::new(dex));
+        self.dexes.push(dex);
         self.retire_counts.lock().unwrap().push(0);
         self.dex_labels.push(format!("dex {}", dex_idx));
         dex_idx
@@ -554,9 +562,9 @@ impl DexPool {
         if matches!(self.classes.get(internal), Some(ClassEntry::NameOnly)) {
             self.name_only_missed
                 .store(true, std::sync::atomic::Ordering::Relaxed);
-            let mut slot = self.name_only_miss.lock().unwrap();
-            if slot.is_none() {
-                *slot = Some(internal.to_string());
+            let mut missed = self.name_only_miss.lock().unwrap();
+            if !missed.iter().any(|n| n == internal) {
+                missed.push(internal.to_string());
             }
             return None;
         }
@@ -567,11 +575,16 @@ impl DexPool {
     pub fn clear_name_only_miss(&self) {
         self.name_only_missed
             .store(false, std::sync::atomic::Ordering::Relaxed);
-        *self.name_only_miss.lock().unwrap() = None;
+        self.name_only_miss.lock().unwrap().clear();
     }
 
     /// Name of the first NameOnly class the renderer requested.
     pub fn name_only_miss_name(&self) -> Option<String> {
+        self.name_only_miss.lock().unwrap().first().cloned()
+    }
+
+    /// Every NameOnly class the renderer requested since the last clear.
+    pub fn name_only_misses(&self) -> Vec<String> {
         self.name_only_miss.lock().unwrap().clone()
     }
 

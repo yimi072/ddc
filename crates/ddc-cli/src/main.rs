@@ -654,11 +654,19 @@ const SUB_HELP_EN: &[(&str, SubHelp)] = &[
                 DEX_EN,
                 FMT_ROW_EN,
                 ("--fast", "skip the code-simplification pass (formatting only)"),
+                (
+                    "--low-memory",
+                    "parse only the images the class actually needs (slower on highly connected classes)",
+                ),
             ],
             examples: &[
                 ("ddc getclass app.apk com.example.Foo", "one class with its nested classes, to stdout"),
                 ("ddc getclass app.apk com.example.Foo -o Foo.java --dex classes3", "pick the image, write a file"),
                 ("ddc getclass base.apk patch.dex com.example.Foo", "several inputs merge into one pool"),
+                (
+                    "ddc getclass app.apk com.example.Foo --low-memory",
+                    "parse only the images the class needs (multi-dex memory saver)",
+                ),
             ],
         },
     ),
@@ -1010,11 +1018,19 @@ const SUB_HELP_ZH: &[(&str, SubHelp)] = &[
                 OUT_FILE_ZH,
                 DEX_ZH,
                 FMT_ROW_ZH,
+                (
+                    "--low-memory",
+                    "只解析该类真正需要的镜像（高连接类会更慢）",
+                ),
             ],
             examples: &[
                 ("ddc getclass app.apk com.example.Foo", "单类连同嵌套类，输出到 stdout"),
                 ("ddc getclass app.apk com.example.Foo -o Foo.java --dex classes3", "指定镜像并写入文件"),
                 ("ddc getclass base.apk patch.dex com.example.Foo", "多输入合并为一个池"),
+                (
+                    "ddc getclass app.apk com.example.Foo --low-memory",
+                    "只解析该类需要的镜像（多 dex 省内存）",
+                ),
             ],
         },
     ),
@@ -2321,11 +2337,13 @@ fn cmd_getclass(args: &[String], t0: std::time::Instant) -> Result<()> {
     let mut dex_filters: Vec<String> = Vec::new();
     let mut format = OutFormat::Auto;
     let mut cure = ddc_dec::classdec::CureMode::Full;
+    let mut low_memory = false;
     let mut positionals: Vec<String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--fast" => cure = ddc_dec::classdec::CureMode::Fast,
+            "--low-memory" => low_memory = true,
             "--format" => {
                 format = parse_format(
                     args.get(i + 1)
@@ -2368,7 +2386,16 @@ fn cmd_getclass(args: &[String], t0: std::time::Instant) -> Result<()> {
         .first()
         .cloned()
         .context(bi!("getclass needs an input file", "getclass 需要输入文件"))?;
-    if format != OutFormat::Text && out.is_none() {
+        if low_memory && !matches!(format, OutFormat::Auto | OutFormat::Text) {
+        bail!(
+            "{}",
+            bif!(
+                "--low-memory supports text output only (omit --format or use --format text)",
+                "--low-memory 仅支持文本输出（去掉 --format 或使用 --format text）"
+            )
+        );
+    }
+if format != OutFormat::Text && out.is_none() {
         let rf = resolve_format(format);
         match rf {
             ResolvedFormat::Text => {}
@@ -2382,7 +2409,11 @@ fn cmd_getclass(args: &[String], t0: std::time::Instant) -> Result<()> {
             }
         }
     }
-    let (text, defining_names) = getclass_text_mode(&inputs, &fqcn, &dex_filters, cure)?;
+    let (text, defining_names) = if low_memory {
+        getclass_text_low_memory(&inputs, &fqcn, &dex_filters, cure)?
+    } else {
+        getclass_text_mode(&inputs, &fqcn, &dex_filters, cure)?
+    };
     let text = format!("{text}\n");
     if defining_names.len() > 1 {
         eprintln!(
@@ -2438,115 +2469,13 @@ fn light_image_names(images: Vec<Image>) -> Result<Vec<Vec<String>>> {
     Ok(out)
 }
 
-/// Type/member holders referenced by the target class and its nested
-/// classes (bytecode included). Conservative: over-inclusion only costs
-/// memory; a missing image degrades type inference.
-fn target_ref_names(dex: &DexFile, target: &str) -> Vec<String> {
-    fn desc_class(d: &str) -> Option<String> {
-        let mut s = d;
-        while let Some(rest) = s.strip_prefix('[') {
-            s = rest;
-        }
-        s.strip_prefix('L')
-            .and_then(|x| x.strip_suffix(';'))
-            .map(str::to_string)
-    }
-    let mut out = Vec::new();
-    let prefix = format!("{target}$");
-    for cd in &dex.class_defs {
-        let name = dex.class_name(cd.class_idx);
-        if name != target && !name.starts_with(&prefix) {
-            continue;
-        }
-        if let Some(n) = desc_class(dex.type_name(cd.superclass_idx)) {
-            out.push(n);
-        }
-        for i in dex.interfaces_of(cd) {
-            if let Some(n) = desc_class(dex.type_name(i)) {
-                out.push(n);
-            }
-        }
-        let data = dex.class_data(cd);
-        for f in data.static_fields.iter().chain(data.instance_fields.iter()) {
-            let fr = dex.field(f.field_idx);
-            if let Some(n) = desc_class(dex.type_name(fr.class_idx)) {
-                out.push(n);
-            }
-            if let Some(n) = desc_class(dex.type_name(fr.type_idx)) {
-                out.push(n);
-            }
-        }
-        for m in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
-            let mr = dex.method(m.method_idx);
-            if let Some(n) = desc_class(dex.type_name(mr.class_idx)) {
-                out.push(n);
-            }
-            let proto = dex.proto(mr.proto_idx);
-            if let Some(n) = desc_class(dex.type_name(proto.return_type_idx)) {
-                out.push(n);
-            }
-            for &t in dex.proto_params(mr.proto_idx) {
-                if let Some(n) = desc_class(dex.type_name(t)) {
-                    out.push(n);
-                }
-            }
-            let Some(code) = dex.code_insns_bytes_at(m.code_off) else {
-                continue;
-            };
-            let unit = |bytes: &[u8], i: usize| -> u32 {
-                bytes
-                    .get(2 * i..2 * i + 2)
-                    .map(|b| u16::from_le_bytes([b[0], b[1]]) as u32)
-                    .unwrap_or(0)
-            };
-            ddc_dex::insn::scan_instructions(code, &mut |op, pc, bytes| match op {
-                0x1c | 0x1f | 0x20 | 0x22..=0x25 => {
-                    if let Some(n) = desc_class(dex.type_name(unit(bytes, pc + 1))) {
-                        out.push(n);
-                    }
-                }
-                0x52..=0x6d => {
-                    let fr = dex.field(unit(bytes, pc + 1));
-                    if let Some(n) = desc_class(dex.type_name(fr.class_idx)) {
-                        out.push(n);
-                    }
-                    if let Some(n) = desc_class(dex.type_name(fr.type_idx)) {
-                        out.push(n);
-                    }
-                }
-                0x6e..=0x72 | 0x74..=0x78 | 0xfa | 0xfb => {
-                    let mr = dex.method(unit(bytes, pc + 1));
-                    if let Some(n) = desc_class(dex.type_name(mr.class_idx)) {
-                        out.push(n);
-                    }
-                    let proto = dex.proto(mr.proto_idx);
-                    if let Some(n) = desc_class(dex.type_name(proto.return_type_idx)) {
-                        out.push(n);
-                    }
-                    for &t in dex.proto_params(mr.proto_idx) {
-                        if let Some(n) = desc_class(dex.type_name(t)) {
-                            out.push(n);
-                        }
-                    }
-                }
-                _ => {}
-            });
-        }
-    }
-    // Outer chain (display/provenance context).
-    let mut outer = target;
-    while let Some(i) = outer.rfind('$') {
-        outer = &outer[..i];
-        out.push(outer.to_string());
-    }
-    out
-}
-
 /// Two-tier single-class path: all class names are registered cheaply
-/// (light inflate, class-def slice only), but full DexFile parsing is
-/// limited to the target's dependency closure. Global name-dependent
-/// rules (case/package/deshadow) still see every class; only bodies are
-/// scoped. Experimental, enabled by `DDC_GET_TWO_TIER=1`.
+/// (light inflate, class-def slice only), but full DexFile parsing starts
+/// with the target image and loads further images **on demand** when the
+/// renderer actually asks for a class whose image is not parsed yet. The
+/// pool is rebuilt with the enlarged parse set and rendering repeats until
+/// no NameOnly access remains. Experimental, enabled by
+/// `DDC_GET_TWO_TIER=1`.
 pub(crate) fn getclass_text_two_tier(
     inputs: &[PathBuf],
     fqcn: &str,
@@ -2556,6 +2485,11 @@ pub(crate) fn getclass_text_two_tier(
     use std::collections::{BTreeSet, HashMap};
     let files = expand_inputs(inputs)?;
     let images = filter_images_by_dex(collect_images(&files)?, dex_filters)?;
+    // A handful of images already has a small parse cost; the two-tier
+    // bookkeeping (light scan + re-render) would only add overhead.
+    if images.len() <= 4 {
+        return Ok(None);
+    }
     let light = light_image_names(images)?;
     let internal = fqcn.replace('.', "/");
 
@@ -2582,57 +2516,15 @@ pub(crate) fn getclass_text_two_tier(
 
     let images = filter_images_by_dex(collect_images(&files)?, dex_filters)?;
     let mut slots: Vec<Option<Image>> = images.into_iter().map(Some).collect();
-    let mut parsed: Vec<Option<(String, DexFile)>> = (0..slots.len()).map(|_| None).collect();
-    let def_imgs: Vec<Image> = defining
-        .iter()
-        .filter_map(|&i| slots[i].take())
-        .collect();
-    let def_parsed = parse_images(def_imgs)?;
-    let mut defining_names: Vec<String> = Vec::with_capacity(def_parsed.len());
-    for (&i, (label, dex)) in defining.iter().zip(def_parsed) {
-        defining_names.push(
-            label
-                .rsplit_once('!')
-                .map(|(_, e)| e.to_string())
-                .unwrap_or_else(|| label.clone()),
-        );
-        parsed[i] = Some((label, dex));
-    }
-    stats_rss("getclass2: defining parsed");
-
-    let mut selected: BTreeSet<usize> = defining.iter().copied().collect();
-    {
-        let dex = &parsed[defining[0]].as_ref().unwrap().1;
-        for n in target_ref_names(dex, &internal) {
-            if let Some(&i) = name_to_image.get(n.as_str()) {
-                selected.insert(i);
-            }
-        }
-    }
-    // Transitive supertype/interface closure: is_subtype must see the
-    // whole chain (a missing intermediate image inserts conservative
-    // casts such as `(Context) this`). Only the needed class names are
-    // walked, not every class in the selected images.
-    let mut needed: std::collections::HashSet<String> =
-        target_ref_names(&parsed[defining[0]].as_ref().unwrap().1, &internal)
-            .into_iter()
-            .collect();
-    needed.insert(internal.clone());
-    let mut ancestors: std::collections::HashSet<String> =
-        std::iter::once(internal.clone()).collect();
-    let nested_prefix = format!("{internal}$");
-    for n in name_to_image.keys() {
-        if n.starts_with(&nested_prefix) {
-            needed.insert((*n).to_string());
-        }
-    }
-    let parse_indices = |idxs: Vec<usize>,
-                             slots: &mut Vec<Option<Image>>,
-                             parsed: &mut Vec<Option<(String, DexFile)>>|
+    let mut parsed: Vec<Option<(String, std::sync::Arc<DexFile>)>> =
+        (0..slots.len()).map(|_| None).collect();
+    let parse_indices = |idxs: &[usize],
+                         slots: &mut Vec<Option<Image>>,
+                         parsed: &mut Vec<Option<(String, std::sync::Arc<DexFile>)>>|
      -> Result<()> {
         let mut imgs = Vec::with_capacity(idxs.len());
         let mut which = Vec::with_capacity(idxs.len());
-        for i in idxs {
+        for &i in idxs {
             if parsed[i].is_none() {
                 if let Some(img) = slots[i].take() {
                     which.push(i);
@@ -2642,81 +2534,23 @@ pub(crate) fn getclass_text_two_tier(
         }
         if !imgs.is_empty() {
             for (i, (label, dex)) in which.into_iter().zip(parse_images(imgs)?) {
-                parsed[i] = Some((label, dex));
+                parsed[i] = Some((label, std::sync::Arc::new(dex)));
             }
         }
         Ok(())
     };
-    let initial: Vec<usize> = selected.iter().copied().collect();
-    // A closure close to the whole archive cannot beat the full parse (the
-    // light scan and defining pass already cost time); hand the query back
-    // to the full path before paying for more images.
-    if selected.len() * 2 > light.len() {
-        return Ok(None);
-    }
-    parse_indices(initial, &mut slots, &mut parsed)?;
-    for _round in 0..16 {
-        let mut more: BTreeSet<usize> = BTreeSet::new();
-        let mut new_names: Vec<String> = Vec::new();
-        let ancestor_adds: Vec<String> = Vec::new();
-        for &di in &selected {
-            let Some((_, dex)) = parsed[di].as_ref() else {
-                continue;
-            };
-            for cd in &dex.class_defs {
-                let n = dex.class_name(cd.class_idx);
-                if !needed.contains(&n) {
-                    continue;
-                }
-                let mut add = |t: &str| {
-                    if let Some(sup) = {
-                        let mut s = t;
-                        while let Some(rest) = s.strip_prefix('[') {
-                            s = rest;
-                        }
-                        s.strip_prefix('L')
-                            .and_then(|x| x.strip_suffix(';'))
-                    } {
-                        if let Some(&img) = name_to_image.get(sup) {
-                            if !selected.contains(&img) {
-                                more.insert(img);
-                            }
-                            new_names.push(sup.to_string());
-                        }
-                    }
-                };
-                add(dex.type_name(cd.superclass_idx));
-                for i in dex.interfaces_of(cd) {
-                    add(dex.type_name(i));
-                }
-
-            }
-        }
-        let names_before = needed.len();
-        for n in new_names {
-            needed.insert(n);
-        }
-        let grew_names = needed.len() != names_before;
-        for n in ancestor_adds {
-            ancestors.insert(n);
-        }
-        let fresh: Vec<usize> = more.into_iter().collect();
-        if fresh.is_empty() && !grew_names {
-            break;
-        }
-        if (selected.len() + fresh.len()) * 2 > light.len() {
-            return Ok(None);
-        }
-        selected.extend(fresh.iter().copied());
-        parse_indices(fresh, &mut slots, &mut parsed)?;
-    }
-    if std::env::var("DDC_STATS").is_ok() {
-        eprintln!(
-            "[getclass2] parsed {}/{} images",
-            parsed.iter().filter(|p| p.is_some()).count(),
-            light.len()
+    parse_indices(&defining, &mut slots, &mut parsed)?;
+    let mut defining_names: Vec<String> = Vec::with_capacity(defining.len());
+    for &i in &defining {
+        let label = &parsed[i].as_ref().unwrap().0;
+        defining_names.push(
+            label
+                .rsplit_once('!')
+                .map(|(_, e)| e.to_string())
+                .unwrap_or_else(|| label.clone()),
         );
     }
+    stats_rss("getclass2: defining parsed");
 
     let mut order: Vec<usize> = Vec::with_capacity(light.len());
     order.extend(defining.iter().copied());
@@ -2725,76 +2559,89 @@ pub(crate) fn getclass_text_two_tier(
             order.push(i);
         }
     }
-    let mut pool = DexPool::new();
-    for i in order {
-        if let Some((label, dex)) = parsed[i].take() {
-            let idx = pool.add_dex_lazy(dex);
-            pool.set_dex_label(idx, label);
-        } else {
-            pool.add_names(light[i].iter().cloned());
-        }
-    }
-    let pool = std::sync::Arc::new(pool);
-    stats_rss("getclass2: names registered");
-    let pc = pool.get(&internal).with_context(|| {
-        bif!("class {0} not found (try `ddc listclasses <input> <pattern>`)", "找不到类 {0}（可用 `ddc listclasses <输入> <模式>`）"; fqcn)
-    })?;
-    ddc_dec::install_case_renames(&pool);
-    stats_rss("getclass2: renames installed");
 
-    pool.clear_name_only_miss();
-    let pending: std::sync::Mutex<Vec<ddc_dec::classdec::PendingMonitor>> =
-        std::sync::Mutex::new(Vec::new());
-    let opts = ClassOptions {
-        provenance: true,
-        cure,
-    };
-    let result = ddc_dec::classdec::decompile_class(&pool, pc, &opts, &pending)
-        .map_err(|e| anyhow::anyhow!("{:#}", e));
-    let text = match result {
-        Ok(t) => t,
-        Err(e) => {
-            if format!("{e:#}").contains("deferred to monitored thread") {
-                let (rx, name, deadline) = pending.into_inner().unwrap().remove(0);
-                let now = std::time::Instant::now();
-                let remaining = deadline.saturating_duration_since(now);
-                rx.recv_timeout(remaining)
-                    .map_err(|_| {
-                        anyhow::anyhow!(
-                            "{}",
-                            bif!("{0}: decompile timed out", "{0}：反编译超时"; name)
-                        )
-                    })?
-                    .map_err(|e| anyhow::anyhow!("{e}"))?
+    for round in 0..=8 {
+        let mut pool = DexPool::new();
+        for &i in &order {
+            if let Some((label, dex)) = &parsed[i] {
+                let idx = pool.add_dex_lazy_arc(dex.clone());
+                pool.set_dex_label(idx, label.clone());
             } else {
-                return Err(e);
+                pool.add_names(light[i].iter().cloned());
             }
         }
-    };
-    if pool.name_only_missed() {
+        let pool = std::sync::Arc::new(pool);
+        stats_rss("getclass2: names registered");
+        let pc = pool.get(&internal).with_context(|| {
+            bif!("class {0} not found (try `ddc listclasses <input> <pattern>`)", "找不到类 {0}（可用 `ddc listclasses <输入> <模式>`）"; fqcn)
+        })?;
+        ddc_dec::install_case_renames(&pool);
+        stats_rss("getclass2: renames installed");
+
+        pool.clear_name_only_miss();
+        let pending: std::sync::Mutex<Vec<ddc_dec::classdec::PendingMonitor>> =
+            std::sync::Mutex::new(Vec::new());
+        let opts = ClassOptions {
+            provenance: true,
+            cure,
+        };
+        let result = ddc_dec::classdec::decompile_class(&pool, pc, &opts, &pending)
+            .map_err(|e| anyhow::anyhow!("{:#}", e));
+        let text = match result {
+            Ok(t) => t,
+            Err(e) => {
+                if format!("{e:#}").contains("deferred to monitored thread") {
+                    let (rx, name, deadline) = pending.into_inner().unwrap().remove(0);
+                    let now = std::time::Instant::now();
+                    let remaining = deadline.saturating_duration_since(now);
+                    rx.recv_timeout(remaining)
+                        .map_err(|_| {
+                            anyhow::anyhow!(
+                                "{}",
+                                bif!("{0}: decompile timed out", "{0}：反编译超时"; name)
+                            )
+                        })?
+                        .map_err(|e| anyhow::anyhow!("{e}"))?
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+        if !pool.name_only_missed() {
+            if std::env::var("DDC_STATS").is_ok() {
+                eprintln!(
+                    "[getclass2] round {round}: parsed {}/{} images",
+                    parsed.iter().filter(|p| p.is_some()).count(),
+                    light.len()
+                );
+            }
+            return Ok(Some((text, defining_names)));
+        }
+        let misses = pool.name_only_misses();
         if std::env::var("DDC_STATS").is_ok() {
-            let miss = pool.name_only_miss_name();
-            eprintln!("[getclass2] fallback: renderer hit NameOnly {miss:?}");
-            if let Some(m) = &miss {
-                let imgs: Vec<usize> = light
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, names)| names.iter().any(|n| n == m))
-                    .map(|(i, _)| i)
-                    .collect();
-                let mut parsed_idx: Vec<usize> = parsed
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, p)| p.is_some())
-                    .map(|(i, _)| i)
-                    .collect();
-                parsed_idx.sort_unstable();
-                eprintln!("[getclass2] miss images={imgs:?} parsed={parsed_idx:?} needed_has={}", needed.contains(m));
+            eprintln!(
+                "[getclass2] round {round}: missed {} classes, parsed {}/{} images",
+                misses.len(),
+                parsed.iter().filter(|p| p.is_some()).count(),
+                light.len()
+            );
+        }
+        drop(pool);
+        let mut fresh: BTreeSet<usize> = BTreeSet::new();
+        for m in &misses {
+            if let Some(&i) = name_to_image.get(m.as_str()) {
+                if parsed[i].is_none() {
+                    fresh.insert(i);
+                }
             }
         }
-        return Ok(None);
+        let fresh: Vec<usize> = fresh.into_iter().collect();
+        if fresh.is_empty() {
+            return Ok(None);
+        }
+        parse_indices(&fresh, &mut slots, &mut parsed)?;
     }
-    Ok(Some((text, defining_names)))
+    Ok(None)
 }
 
 /// The decompiled source of ONE class + the short names of every image
@@ -2820,6 +2667,30 @@ pub(crate) fn getclass_text_mode(
             return Ok(r);
         }
     }
+    getclass_text_full(inputs, fqcn, dex_filters, cure)
+}
+
+/// Explicit low-memory mode (`getclass --low-memory`): on-demand two-tier
+/// parsing, falling back to the full parse when the renderer requests a
+/// class with no image or the number of rounds is exhausted.
+pub(crate) fn getclass_text_low_memory(
+    inputs: &[PathBuf],
+    fqcn: &str,
+    dex_filters: &[String],
+    cure: ddc_dec::classdec::CureMode,
+) -> Result<(String, Vec<String>)> {
+    if let Some(r) = getclass_text_two_tier(inputs, fqcn, dex_filters, cure)? {
+        return Ok(r);
+    }
+    getclass_text_full(inputs, fqcn, dex_filters, cure)
+}
+
+fn getclass_text_full(
+    inputs: &[PathBuf],
+    fqcn: &str,
+    dex_filters: &[String],
+    cure: ddc_dec::classdec::CureMode,
+) -> Result<(String, Vec<String>)> {
     let files = expand_inputs(inputs)?;
     let parsed = parse_images(filter_images_by_dex(collect_images(&files)?, dex_filters)?)?;
     stats_rss("getclass: after parse_images");

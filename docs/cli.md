@@ -262,11 +262,17 @@ clean (timing prints only with `-o`).
 
 ### Decompile surgically
 
-- **`ddc getclass <input> FQCN [-o FILE] [--dex NAME]`** — one class
-  with its nested/anonymous/local classes, through the full pipeline.
-  Ambiguous names (defined in several images) get a warning listing the
-  images; the defining image is registered first so the pool resolves
-  from it.
+- **`ddc getclass <input> FQCN [-o FILE] [--dex NAME] [--low-memory]`** —
+  one class with its nested/anonymous/local classes, through the full
+  pipeline. Ambiguous names (defined in several images) get a warning
+  listing the images; the defining image is registered first so the pool
+  resolves from it. `--low-memory` starts from the defining image and
+  loads further images only when the renderer actually asks for a class
+  they define (re-rendering until stable). On multi-dex APKs this cuts
+  peak memory roughly in half for self-contained classes; highly
+  connected classes can be slower. Text output only; the default path is
+  unchanged. Archives with four or fewer images use the full path
+  automatically.
 - **`ddc getmethod <input> FQCN[.method] [-o FILE]`** — one method,
   sliced out of the decompiled class: provenance header + package line +
   every matching overload, dedented. A miss lists the class's method
