@@ -100,8 +100,8 @@ python3 packaging/sync.py --refresh --program <name>
 ## 发版流程
 
 `scripts/release.sh` 在 release workflow 变绿后会自动做这几步：刷新
-digest、重新生成清单、提交 `packaging/`，并构建/上传直接安装产物。手工
-等价操作：
+digest、重新生成清单、提交 `packaging/`，构建/上传直接安装产物，并触发
+GitHub Packages 发布。手工等价操作：
 
 ```bash
 python3 packaging/sync.py --refresh --program ddc

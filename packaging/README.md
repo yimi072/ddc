@@ -112,8 +112,8 @@ The release API must already have the assets for the catalog version.
 
 `scripts/release.sh` does this automatically after the release workflow turns
 green: it refreshes the digests, regenerates the manifests, commits
-`packaging/`, and builds/uploads the direct-install assets. The manual
-equivalent is:
+`packaging/`, builds/uploads the direct-install assets, and triggers the
+GitHub Packages publication. The manual equivalent is:
 
 ```bash
 python3 packaging/sync.py --refresh --program ddc
