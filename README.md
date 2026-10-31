@@ -77,6 +77,37 @@ scoop install ddc
 scoop install https://raw.githubusercontent.com/ejfkdev/scoop-bucket/main/bucket/ddc.json
 ```
 
+**Windows** (WinGet) — the package is live in `microsoft/winget-pkgs`:
+
+```powershell
+winget install --id ejfkdev.ddc -e --source winget
+```
+
+**Any platform** (npm) — `@ejfkdev/ddc` is a small wrapper that downloads and
+SHA-256-verifies the release binary (Node 18+):
+
+```bash
+npm install -g @ejfkdev/ddc
+```
+
+If install scripts are disabled, the `ddc` launcher downloads the binary on
+first use. GitHub Packages is also available for users with a token that has
+`read:packages`:
+
+```bash
+npm config set @ejfkdev:registry https://npm.pkg.github.com/
+npm config set //npm.pkg.github.com/:_authToken "$GITHUB_TOKEN"
+npm install -g @ejfkdev/ddc
+```
+
+Without any package registry:
+
+```bash
+# replace with the release you want
+VERSION=0.1.33
+npm install -g "https://github.com/ejfkdev/ddc/releases/download/v$VERSION/ejfkdev-ddc-$VERSION.tgz"
+```
+
 **cargo-binstall** (any platform — fetches the prebuilt release binary
 instead of compiling):
 
@@ -84,27 +115,38 @@ instead of compiling):
 cargo binstall ddc-cli
 ```
 
+**Arch Linux** — the AUR package will be `ddc-bin`, but AUR registration is
+currently closed (HTTP 503). Install the release bundle manually in the
+meantime (requires `base-devel`):
+
+```bash
+# replace with the release you want
+VERSION=0.1.33
+curl -LO "https://github.com/ejfkdev/ddc/releases/download/v$VERSION/ddc-bin-$VERSION-1-aur.tar.gz"
+tar xzf "ddc-bin-$VERSION-1-aur.tar.gz"
+cd ddc-bin && makepkg -si
+```
+
+Once AUR registration reopens: `yay -S ddc-bin` or `paru -S ddc-bin`.
+
 **Binaries**: every [release](https://github.com/ejfkdev/ddc/releases)
 ships raw binaries (no archives) for `linux-amd64`, `linux-arm64`,
 `windows-amd64`, `windows-arm64`, `macos-amd64` and `macos-arm64` —
 non-macOS builds UPX-compressed.
 
-**Other package channels**: manifests for Arch (AUR `ddc-bin`), Windows
-Package Manager (`ejfkdev.ddc`) and npm (`@ejfkdev/ddc`) are generated in
-[`packaging/`](packaging/). The npm wrapper is live on npmjs and GitHub
-Packages, and WinGet is live in `microsoft/winget-pkgs`; AUR publication is
-pending (AUR registration is currently closed). Every release also ships
-direct-install assets (npm tarball, Arch PKGBUILD bundle, WinGet local
-manifests); see [packaging/README.md](packaging/README.md) for status and
-commands. The catalog is multi-program, so future binaries can reuse the same
-channels.
-
 **From source** (Rust stable):
 
 ```bash
+cargo install ddc-cli        # from crates.io, compiles locally
+
+# or build the checkout:
 git clone https://github.com/ejfkdev/ddc && cd ddc
 cargo build --release
 ```
+
+Package manifests and release bundles are generated from
+[`packaging/`](packaging/); see [packaging/README.md](packaging/README.md) for
+AUR/WinGet/npm status and multi-program support.
 
 ## Usage
 

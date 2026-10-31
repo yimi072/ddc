@@ -69,6 +69,36 @@ scoop install ddc
 scoop install https://raw.githubusercontent.com/ejfkdev/scoop-bucket/main/bucket/ddc.json
 ```
 
+**Windows**（WinGet）——包已进入 `microsoft/winget-pkgs`：
+
+```powershell
+winget install --id ejfkdev.ddc -e --source winget
+```
+
+**全平台**（npm）——`@ejfkdev/ddc` 是一个小 wrapper，安装时下载并校验
+SHA-256（需要 Node 18+）：
+
+```bash
+npm install -g @ejfkdev/ddc
+```
+
+如果 install scripts 被禁用，`ddc` launcher 会在首次运行时下载二进制。
+已有带 `read:packages` 的 GitHub token 时，也可以走 GitHub Packages：
+
+```bash
+npm config set @ejfkdev:registry https://npm.pkg.github.com/
+npm config set //npm.pkg.github.com/:_authToken "$GITHUB_TOKEN"
+npm install -g @ejfkdev/ddc
+```
+
+完全不经过包仓库：
+
+```bash
+# 改成需要的版本
+VERSION=0.1.33
+npm install -g "https://github.com/ejfkdev/ddc/releases/download/v$VERSION/ejfkdev-ddc-$VERSION.tgz"
+```
+
 **cargo-binstall**（全平台——直接下载预编译 release 二进制，不用本地
 编译）：
 
@@ -76,26 +106,37 @@ scoop install https://raw.githubusercontent.com/ejfkdev/scoop-bucket/main/bucket
 cargo binstall ddc-cli
 ```
 
+**Arch Linux**——AUR 包名将是 `ddc-bin`，但 AUR 注册目前关闭（HTTP
+503）。先用 release 里的包手工安装（需要 `base-devel`）：
+
+```bash
+# 改成需要的版本
+VERSION=0.1.33
+curl -LO "https://github.com/ejfkdev/ddc/releases/download/v$VERSION/ddc-bin-$VERSION-1-aur.tar.gz"
+tar xzf "ddc-bin-$VERSION-1-aur.tar.gz"
+cd ddc-bin && makepkg -si
+```
+
+AUR 注册恢复后：`yay -S ddc-bin` 或 `paru -S ddc-bin`。
+
 **二进制**：每个 [release](https://github.com/ejfkdev/ddc/releases) 附带
 裸二进制（无压缩包），覆盖 `linux-amd64`、`linux-arm64`、
 `windows-amd64`、`windows-arm64`、`macos-amd64`、`macos-arm64`——非
 macOS 平台已 UPX 压缩。
 
-**其他包渠道**：Arch（AUR `ddc-bin`）、Windows Package Manager
-（`ejfkdev.ddc`）与 npm（`@ejfkdev/ddc`）的清单在
-[`packaging/`](packaging/) 中生成。npm wrapper 已在 npmjs 和 GitHub
-Packages 上线，WinGet 已进入 `microsoft/winget-pkgs`；AUR 发布待账号注册
-恢复（目前 AUR 临时关闭注册）。每个 release 都附带可直接安装的产物
-（npm tarball、Arch PKGBUILD 包、WinGet 本地清单）；状态与命令见
-[packaging/README.zh-CN.md](packaging/README.zh-CN.md)。catalog 支持多个
-二进制程序，后续程序可复用同一套渠道。
-
 **源码构建**（Rust stable）：
 
 ```bash
+cargo install ddc-cli        # 从 crates.io 编译
+
+# 或者构建 checkout：
 git clone https://github.com/ejfkdev/ddc && cd ddc
 cargo build --release
 ```
+
+包清单和 release 产物由 [`packaging/`](packaging/) 生成；AUR/WinGet/npm
+状态与多程序支持见
+[packaging/README.zh-CN.md](packaging/README.zh-CN.md)。
 
 ## 用法
 
