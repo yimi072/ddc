@@ -156,8 +156,15 @@ case "$channel" in
       echo "  rerun with --yes to publish"
       exit 0
     fi
+    if [[ -n ${NPM_TOKEN:-} ]]; then
+      npmrc=$(mktemp "${TMPDIR:-/tmp}/ddc-npmrc.XXXXXX")
+      chmod 600 "$npmrc"
+      printf '//registry.npmjs.org/:_authToken=${NPM_TOKEN}\n' > "$npmrc"
+      export NPM_CONFIG_USERCONFIG="$npmrc"
+      trap 'rm -f "$npmrc"' EXIT
+    fi
     if ! npm whoami --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
-      echo "publish: not logged in to npmjs; run 'npm login --registry=https://registry.npmjs.org/'" >&2
+      echo "publish: not logged in to npmjs; run 'npm login --registry=https://registry.npmjs.org/' or set NPM_TOKEN" >&2
       exit 1
     fi
     (cd "$npm_dir" && npm publish --access public --registry=https://registry.npmjs.org/)

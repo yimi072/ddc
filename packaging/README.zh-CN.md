@@ -194,6 +194,16 @@ npm login --registry=https://registry.npmjs.org/
 ./packaging/publish.sh npm --yes
 ```
 
+无人值守发布时，创建一个带 publish 权限并勾选 **Bypass 2FA** 的 granular
+token，用 `NPM_TOKEN` 传入；脚本会生成临时 0600 npmrc，退出时删除：
+
+```bash
+NPM_TOKEN=npm_... ./packaging/publish.sh npm --yes
+```
+
+发布完记得在 npmjs token 页面撤销它。普通 web 登录 token 在发布时仍会
+要求 OTP。
+
 发布前先本地测真实 tarball：
 
 ```bash

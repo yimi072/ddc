@@ -213,6 +213,17 @@ npm login --registry=https://registry.npmjs.org/
 ./packaging/publish.sh npm --yes
 ```
 
+For unattended publishing, create a granular token with publish permission and
+**Bypass 2FA**, then pass it as `NPM_TOKEN`; the script uses a temporary
+0600 npmrc and removes it on exit:
+
+```bash
+NPM_TOKEN=npm_... ./packaging/publish.sh npm --yes
+```
+
+Revoke that token after publishing (the npmjs token page deletes it). A normal
+web-login token still asks for an OTP on publish.
+
 Test the exact tarball locally first:
 
 ```bash
