@@ -91,9 +91,10 @@ non-macOS builds UPX-compressed.
 
 **Other package channels**: manifests for Arch (AUR `ddc-bin`), Windows
 Package Manager (`ejfkdev.ddc`) and npm (`@ejfkdev/ddc`) are generated in
-[`packaging/`](packaging/). Registry publication is pending, but every release
-also ships direct-install assets (npm tarball, Arch PKGBUILD bundle, WinGet
-local manifests); see [packaging/README.md](packaging/README.md) for status and
+[`packaging/`](packaging/). The npm wrapper is live on GitHub Packages;
+npmjs/AUR registry publication is pending. Every release also ships
+direct-install assets (npm tarball, Arch PKGBUILD bundle, WinGet local
+manifests); see [packaging/README.md](packaging/README.md) for status and
 commands. The catalog is multi-program, so future binaries can reuse the same
 channels.
 

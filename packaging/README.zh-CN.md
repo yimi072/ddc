@@ -17,7 +17,7 @@ Scoop bucket 一样：一份 catalog 列出程序，一个生成器渲染各渠�
 | Scoop | `ejfkdev/scoop-bucket`（独立仓库，自动更新） | 已上线 |
 | Arch Linux / AUR | `packaging/aur/ddc-bin/` | AUR 待发布；PKGBUILD 包已上线 |
 | Windows Package Manager | `packaging/winget/` | PR 已开，CLA 待签；本地 zip 已上线 |
-| npm | `packaging/npm/ddc/` | npmjs 待发布；tarball 已上线 |
+| npm | `packaging/npm/ddc/` | GitHub Packages 已上线；npmjs 待发布；tarball 已上线 |
 | PyPI | — | 明确不做 |
 | Docker 镜像 | — | 不在范围内 |
 | Nix | — | 暂缓，原因见下 |
@@ -26,10 +26,10 @@ Scoop bucket 一样：一份 catalog 列出程序，一个生成器渲染各渠�
 三个包仓库渠道的清单都已生成并做了针对性验证：AUR 的 PKGBUILD 通过
 shell 语法检查，`.SRCINFO` 与 PKGBUILD 由同一份 catalog 生成；WinGet
 清单通过官方 JSON schema；npm 包已实际安装并运行（包括禁用 install
-scripts 的场景）。不依赖包仓库账号的产物（npm tarball、AUR 包、WinGet
-本地清单）已附在 v0.1.33 release 上。真正发布到仓库需要仓库之外的凭证：
-AUR 账号与 SSH key、`@ejfkdev` 作用域的 npm 登录，以及贡献者接受
-Microsoft CLA 后的 WinGet PR。
+scripts 的场景）。npm wrapper 已在 GitHub Packages 上线；不依赖包仓库
+账号的产物（npm tarball、AUR 包、WinGet 本地清单）已附在 v0.1.33
+release 上。npmjs 和 AUR 仍需仓库之外的凭证：`@ejfkdev` 作用域的 npm
+登录和带 SSH key 的 AUR 账号。WinGet PR 需要贡献者接受 Microsoft CLA。
 
 **为什么不做 PyPI？** Python wheel 不适合装原生二进制：支持六个平台就要
 六个带 platform tag 的 wheel，每个都塞一份二进制，还要额外的发布任务。
@@ -175,8 +175,19 @@ npm 上不带 scope 的 `ddc` 已被占用，所以使用 scope。在 npmjs 发�
 同一个 tarball 已附在每个 release 上，见
 [直接安装资产](#直接安装资产)。
 
-一次性准备：`npm login`，并确认账号可以使用 `@ejfkdev` 作用域（需要时在
-npm 创建组织）。
+**GitHub Packages（已上线）**：
+`.github/workflows/publish-github-packages.yml` 使用仓库的 `GITHUB_TOKEN`
+发布同一个 wrapper，由 `release.sh` 触发。安装需要带 `read:packages` 的
+GitHub token：
+
+```bash
+npm config set @ejfkdev:registry https://npm.pkg.github.com/
+npm config set //npm.pkg.github.com/:_authToken "$GITHUB_TOKEN"
+npm install -g @ejfkdev/ddc
+```
+
+**npmjs（待发布）**：`npm login`，并确认账号可以使用 `@ejfkdev` 作用域
+（需要时在 npm 创建组织）。
 
 然后：
 

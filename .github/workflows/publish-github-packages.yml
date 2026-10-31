@@ -23,4 +23,19 @@ jobs:
         working-directory: packaging/npm/ddc
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --access public
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          package="@ejfkdev/ddc@$version"
+          if npm view "$package" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "$package is already published"
+            exit 0
+          fi
+          if npm publish --access public; then
+            exit 0
+          fi
+          if npm view "$package" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "$package is already published"
+            exit 0
+          fi
+          exit 1

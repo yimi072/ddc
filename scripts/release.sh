@@ -193,6 +193,10 @@ python3 packaging/bundle.py --program ddc --version "$ver" --out "$bundle_dir"
 gh release upload "v$ver" "$bundle_dir"/* --repo "$REPO" --clobber
 echo "==> uploaded npm tarball, AUR bundle and WinGet local manifests"
 
+echo "==> publishing npm wrapper to GitHub Packages"
+gh workflow run publish-github-packages.yml --repo "$REPO" --ref main
+echo "    https://github.com/$REPO/actions/workflows/publish-github-packages.yml"
+
 # ---- 6. tap + scoop ----------------------------------------------------------
 echo "==> dispatching homebrew-tap + scoop-bucket updates"
 gh workflow run auto-update.yml --repo "$TAP_REPO"
@@ -203,8 +207,9 @@ echo "    direct-install assets uploaded:"
 echo "      npm install -g https://github.com/$REPO/releases/download/v$ver/ejfkdev-ddc-$ver.tgz"
 echo "      ddc-bin-$ver-1-aur.tar.gz (PKGBUILD + .SRCINFO)"
 echo "      ejfkdev.ddc-$ver-winget.zip (local manifests)"
-echo "    registry channels ready when credentials are available:"
-echo "      packaging/publish.sh aur --yes   # AUR ddc-bin"
-echo "      packaging/publish.sh npm --yes   # npm @ejfkdev/ddc"
-echo "      packaging/publish.sh winget      # WinGet PR instructions"
+echo "    registry channels:"
+echo "      npm (GitHub Packages) — triggered automatically above"
+echo "      packaging/publish.sh aur --yes   # AUR ddc-bin (needs AUR account/key)"
+echo "      packaging/publish.sh npm --yes   # npmjs (needs npm login)"
+echo "      packaging/publish.sh winget      # WinGet PR (needs Microsoft CLA)"
 echo "==> done: brew install ejfkdev/tap/ddc / scoop bucket add ejfkdev https://github.com/ejfkdev/scoop-bucket && scoop install ddc"

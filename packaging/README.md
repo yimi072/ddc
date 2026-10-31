@@ -18,7 +18,7 @@ the AUR, WinGet and npm renderers are already generic.
 | Scoop | `ejfkdev/scoop-bucket` (separate repo, auto-updated) | live |
 | Arch Linux / AUR | `packaging/aur/ddc-bin/` | AUR pending; PKGBUILD bundle live |
 | Windows Package Manager | `packaging/winget/` | PR open, CLA pending; local zip live |
-| npm | `packaging/npm/ddc/` | npmjs pending; tarball live |
+| npm | `packaging/npm/ddc/` | GitHub Packages live; npmjs pending; tarball live |
 | PyPI | — | deliberately not used |
 | Docker image | — | out of scope |
 | Nix | — | not yet; see below |
@@ -28,11 +28,12 @@ The registry channels are generated and validated locally: the AUR PKGBUILD
 passes shell syntax checks and its `.SRCINFO` is generated from the same
 catalog, the WinGet manifests validate against the official JSON schemas, and
 the npm package was installed and executed end-to-end (including with install
-scripts disabled). The registry-independent artifacts (npm tarball, AUR
-bundle, WinGet local manifests) are already attached to the v0.1.33 release.
-Registry publication requires credentials that live outside the repository:
-an AUR account with an SSH key, an npm login in the `@ejfkdev` scope, and a
-WinGet pull request with the Microsoft CLA accepted by the contributor.
+scripts disabled). The npm wrapper is live on GitHub Packages, and the
+registry-independent artifacts (npm tarball, AUR bundle, WinGet local
+manifests) are attached to the v0.1.33 release. npmjs and AUR publication
+still need credentials outside the repository: an npm login in the
+`@ejfkdev` scope and an AUR account with an SSH key. The WinGet PR needs the
+Microsoft CLA accepted by the contributor.
 
 **Why no PyPI?** A Python wheel is the wrong container for a native binary:
 supporting six platforms means six platform-tagged wheels, each carrying the
@@ -193,8 +194,19 @@ The unscoped `ddc` name is already taken on npm, hence the scope. Until the
 registry publication happens, the same tarball is attached to each release;
 see [Direct-install assets](#direct-install-assets).
 
-One-time setup: sign in with `npm login` and make sure the `@ejfkdev` scope is
-available to the account (create the npm organization if needed).
+**GitHub Packages (live):** `.github/workflows/publish-github-packages.yml`
+publishes the same wrapper with the repository's `GITHUB_TOKEN` and is
+triggered by `release.sh`. Install with a GitHub token that has
+`read:packages`:
+
+```bash
+npm config set @ejfkdev:registry https://npm.pkg.github.com/
+npm config set //npm.pkg.github.com/:_authToken "$GITHUB_TOKEN"
+npm install -g @ejfkdev/ddc
+```
+
+**npmjs (pending):** sign in with `npm login` and make sure the `@ejfkdev`
+scope is available to the account (create the npm organization if needed).
 
 Then:
 
