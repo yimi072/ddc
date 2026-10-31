@@ -16,24 +16,23 @@ the AUR, WinGet and npm renderers are already generic.
 | cargo-binstall | `[package.metadata.binstall]` in `crates/ddc-cli/Cargo.toml` | live and verified |
 | Homebrew | `ejfkdev/homebrew-tap` (separate repo, auto-updated) | live |
 | Scoop | `ejfkdev/scoop-bucket` (separate repo, auto-updated) | live |
-| Arch Linux / AUR | `packaging/aur/ddc-bin/` | AUR pending; PKGBUILD bundle live |
-| Windows Package Manager | `packaging/winget/` | PR open, CLA pending; local zip live |
-| npm | `packaging/npm/ddc/` | GitHub Packages live; npmjs pending; tarball live |
+| Arch Linux / AUR | `packaging/aur/ddc-bin/` | AUR pending (registration temporarily closed); PKGBUILD bundle live |
+| Windows Package Manager | `packaging/winget/` | live in winget-pkgs (#437825); local zip live |
+| npm | `packaging/npm/ddc/` | npmjs live; GitHub Packages live; tarball live |
 | PyPI | — | deliberately not used |
 | Docker image | — | out of scope |
 | Nix | — | not yet; see below |
 | Chocolatey | — | not yet; Scoop already covers Windows |
 
-The registry channels are generated and validated locally: the AUR PKGBUILD
-passes shell syntax checks and its `.SRCINFO` is generated from the same
-catalog, the WinGet manifests validate against the official JSON schemas, and
-the npm package was installed and executed end-to-end (including with install
-scripts disabled). The npm wrapper is live on GitHub Packages, and the
-registry-independent artifacts (npm tarball, AUR bundle, WinGet local
-manifests) are attached to the v0.1.33 release. npmjs and AUR publication
-still need credentials outside the repository: an npm login in the
-`@ejfkdev` scope and an AUR account with an SSH key. The WinGet PR needs the
-Microsoft CLA accepted by the contributor.
+The registry channels are in place: the npm wrapper is live on npmjs and
+GitHub Packages and was installed/executed end-to-end (including with install
+scripts disabled), the WinGet package is live in `microsoft/winget-pkgs`
+(PR #437825, merged 2026-10-30), and the AUR PKGBUILD is generated and
+validated. AUR submission is currently blocked because AUR has temporarily
+closed new account registration (HTTP 503); the self-contained
+`ddc-bin-<version>-1-aur.tar.gz` bundle remains installable with `makepkg`.
+The registry-independent npm tarball and WinGet local-manifest zip are also
+attached to the v0.1.33 release.
 
 **Why no PyPI?** A Python wheel is the wrong container for a native binary:
 supporting six platforms means six platform-tagged wheels, each carrying the
@@ -157,15 +156,15 @@ install.
 
 ### Windows Package Manager (WinGet)
 
-The generated manifests are at
-`packaging/winget/manifests/e/ejfkdev/ddc/<version>/`. They are validated
-against the official v1.6.0 JSON schemas. The release also carries
-`ejfkdev.ddc-<version>-winget.zip` for a local `winget install --manifest`
-while the community PR is pending. The PR
-([#466817](https://github.com/microsoft/winget-pkgs/pull/466817)) is blocked
-on the Microsoft CLA being accepted by the contributor; that is a personal
-legal agreement, not something the release automation can sign. Publish with
-either:
+The package is live in `microsoft/winget-pkgs` as `ejfkdev.ddc` 0.1.33
+(PR [#437825](https://github.com/microsoft/winget-pkgs/pull/437825), merged
+2026-10-30; the community manifest uses schema 1.12.0 and adds the VCRedist
+dependencies). The generated 1.6.0 manifests under
+`packaging/winget/manifests/e/ejfkdev/ddc/<version>/` back the local
+`ejfkdev.ddc-<version>-winget.zip` path used by
+`winget install --manifest`. The later duplicate PR #466817 was closed.
+
+For a new version, update the community package with either:
 
 **wingetcreate (Windows):**
 
@@ -205,12 +204,12 @@ npm config set //npm.pkg.github.com/:_authToken "$GITHUB_TOKEN"
 npm install -g @ejfkdev/ddc
 ```
 
-**npmjs (pending):** sign in with `npm login` and make sure the `@ejfkdev`
-scope is available to the account (create the npm organization if needed).
-
-Then:
+**npmjs (live):** `@ejfkdev/ddc@0.1.33` is published. The publish script
+targets `https://registry.npmjs.org/` explicitly, so a local mirror registry
+does not redirect the publish, and it preflights `npm whoami`. Log in first:
 
 ```bash
+npm login --registry=https://registry.npmjs.org/
 ./packaging/publish.sh npm --yes
 ```
 

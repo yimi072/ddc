@@ -83,8 +83,9 @@ macOS 平台已 UPX 压缩。
 
 **其他包渠道**：Arch（AUR `ddc-bin`）、Windows Package Manager
 （`ejfkdev.ddc`）与 npm（`@ejfkdev/ddc`）的清单在
-[`packaging/`](packaging/) 中生成。npm wrapper 已在 GitHub Packages
-上线；npmjs/AUR 包仓库发布尚待账号。每个 release 都附带可直接安装的产物
+[`packaging/`](packaging/) 中生成。npm wrapper 已在 npmjs 和 GitHub
+Packages 上线，WinGet 已进入 `microsoft/winget-pkgs`；AUR 发布待账号注册
+恢复（目前 AUR 临时关闭注册）。每个 release 都附带可直接安装的产物
 （npm tarball、Arch PKGBUILD 包、WinGet 本地清单）；状态与命令见
 [packaging/README.zh-CN.md](packaging/README.zh-CN.md)。catalog 支持多个
 二进制程序，后续程序可复用同一套渠道。

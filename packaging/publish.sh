@@ -151,12 +151,16 @@ case "$channel" in
     fi
     npm_dir="$PKG/npm/${NPM_PKG##*/}"
     if (( ! confirm )); then
-      echo "publish: dry run — would publish $NPM_PKG $VERSION"
+      echo "publish: dry run — would publish $NPM_PKG $VERSION to npmjs"
       (cd "$npm_dir" && npm pack --dry-run)
       echo "  rerun with --yes to publish"
       exit 0
     fi
-    (cd "$npm_dir" && npm publish --access public)
+    if ! npm whoami --registry=https://registry.npmjs.org/ >/dev/null 2>&1; then
+      echo "publish: not logged in to npmjs; run 'npm login --registry=https://registry.npmjs.org/'" >&2
+      exit 1
+    fi
+    (cd "$npm_dir" && npm publish --access public --registry=https://registry.npmjs.org/)
     ;;
 
   winget)
