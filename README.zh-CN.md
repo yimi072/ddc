@@ -81,6 +81,12 @@ cargo binstall ddc-cli
 `windows-amd64`、`windows-arm64`、`macos-amd64`、`macos-arm64`——非
 macOS 平台已 UPX 压缩。
 
+**其他包渠道**：Arch（AUR `ddc-bin`）、Windows Package Manager
+（`ejfkdev.ddc`）与 npm（`@ejfkdev/ddc`）的清单在
+[`packaging/`](packaging/) 中生成；AUR、WinGet、npm 尚待发布（状态与命令
+见 [packaging/README.zh-CN.md](packaging/README.zh-CN.md)）。catalog 支持
+多个二进制程序，后续程序可复用同一套渠道。
+
 **源码构建**（Rust stable）：
 
 ```bash

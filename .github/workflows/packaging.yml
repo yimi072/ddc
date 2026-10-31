@@ -1,0 +1,43 @@
+name: packaging
+
+on:
+  push:
+    paths:
+      - "packaging/**"
+      - ".github/workflows/packaging.yml"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - ".github/workflows/packaging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify package manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check generator and manifests
+        run: python3 packaging/sync.py --check
+
+      - name: Shell syntax
+        run: |
+          bash -n packaging/publish.sh
+          bash -n packaging/aur/ddc-bin/PKGBUILD
+          ruby --version
+
+      - name: npm package dry run
+        working-directory: packaging/npm/ddc
+        run: npm pack --dry-run

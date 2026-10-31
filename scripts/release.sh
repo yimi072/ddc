@@ -159,10 +159,37 @@ done
 gh run watch "$run" --repo "$REPO" --exit-status >/dev/null
 echo "==> release CI green: https://github.com/$REPO/actions/runs/$run"
 
+# ---- 5b. package manifests ---------------------------------------------------
+# The release assets are now immutable, so the AUR/WinGet/npm manifests can
+# pin their digests. A failed refresh is retried: the release API can lag a
+# few seconds behind the workflow finishing.
+echo "==> refreshing AUR / WinGet / npm manifests"
+typeset -i pkg_try=0
+until python3 packaging/sync.py --refresh --program ddc; do
+  (( pkg_try += 1 ))
+  if (( pkg_try >= 3 )); then
+    echo "packaging refresh failed — run packaging/sync.py --refresh manually" >&2
+    exit 1
+  fi
+  sleep 10
+done
+if [[ -n $(git status --porcelain packaging) ]]; then
+  git add packaging
+  git commit -q -m "packaging: ddc $ver"
+  git push -q origin main
+  echo "==> packaging manifests committed"
+else
+  echo "==> packaging manifests unchanged"
+fi
+
 # ---- 6. tap + scoop ----------------------------------------------------------
 echo "==> dispatching homebrew-tap + scoop-bucket updates"
 gh workflow run auto-update.yml --repo "$TAP_REPO"
 gh workflow run auto-update.yml --repo "$BUCKET_REPO"
 echo "    $TAP_REPO/actions (Auto-update formulae)"
 echo "    $BUCKET_REPO/actions (Auto-update manifests)"
+echo "    packaging channels ready:"
+echo "      packaging/publish.sh aur --yes   # AUR ddc-bin"
+echo "      packaging/publish.sh npm --yes   # npm @ejfkdev/ddc"
+echo "      packaging/publish.sh winget      # WinGet PR instructions"
 echo "==> done: brew install ejfkdev/tap/ddc / scoop bucket add ejfkdev https://github.com/ejfkdev/scoop-bucket && scoop install ddc"

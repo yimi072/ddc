@@ -1,0 +1,57 @@
+# Binary packaging catalog.
+#
+# One [[program]] table per binary. `sync.py` reads this file, resolves the
+# version, fetches the release asset digests, and renders every channel that
+# has a config table. Adding a program (or a channel for an existing program)
+# is a catalog edit, not a new script.
+schema = 1
+
+[[program]]
+name = "ddc"
+# Version is resolved from this crate. Workspace inheritance is followed.
+version_from = "crates/ddc-cli/Cargo.toml"
+repo = "ejfkdev/ddc"
+crate = "ddc-cli"
+# Release asset naming. {version} and {target} are the release tag without
+# "v" and the Rust target triple; {exe} is ".exe" on Windows, "" elsewhere.
+asset = "ddc-v{version}-{target}{exe}"
+summary = "DEX to Java decompiler with a CLI, HTTP API and MCP server"
+description = """\
+ddc decompiles Android DEX bytecode to readable Java. One binary exposes a
+CLI, an HTTP API and an MCP server for AI agents. It reads APK, XAPK, APKS,
+JAR and ZIP containers, handles multi-dex apps, and keeps large decompiles
+browsable through progressive-disclosure views."""
+license = "MIT"
+license_file = "LICENSE"
+homepage = "https://github.com/ejfkdev/ddc"
+publisher = "ejfkdev"
+keywords = ["decompiler", "dex", "dalvik", "android", "reverse-engineering", "cli", "mcp"]
+targets = [
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+]
+
+# Arch Linux: a prebuilt package. The AUR package name ends in -bin so a
+# future source package can own "ddc" without a rename.
+[program.aur]
+pkgname = "ddc-bin"
+pkgrel = 1
+depends = ["glibc", "gcc-libs"]
+provides = ["ddc"]
+conflicts = ["ddc"]
+arch = { x86_64 = "x86_64-unknown-linux-gnu", aarch64 = "aarch64-unknown-linux-gnu" }
+
+# Windows Package Manager. A portable EXE needs no installer runtime.
+[program.winget]
+id = "ejfkdev.ddc"
+arch = { x64 = "x86_64-pc-windows-msvc", arm64 = "aarch64-pc-windows-msvc" }
+tags = ["dex", "decompiler", "android", "reverse-engineering", "cli", "mcp", "rust"]
+
+# npm: a thin wrapper whose postinstall downloads and SHA-256-verifies the
+# matching release binary. Scoped because the unscoped "ddc" name is taken.
+[program.npm]
+package = "@ejfkdev/ddc"

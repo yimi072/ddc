@@ -89,6 +89,12 @@ ships raw binaries (no archives) for `linux-amd64`, `linux-arm64`,
 `windows-amd64`, `windows-arm64`, `macos-amd64` and `macos-arm64` —
 non-macOS builds UPX-compressed.
 
+**Other package channels**: manifests for Arch (AUR `ddc-bin`), Windows
+Package Manager (`ejfkdev.ddc`) and npm (`@ejfkdev/ddc`) are generated in
+[`packaging/`](packaging/); AUR, WinGet and npm publication is pending (see
+[packaging/README.md](packaging/README.md) for status and commands). The
+catalog is multi-program, so future binaries can reuse the same channels.
+
 **From source** (Rust stable):
 
 ```bash
