@@ -182,13 +182,28 @@ else
   echo "==> packaging manifests unchanged"
 fi
 
+# ---- 5c. direct-install assets -----------------------------------------------
+# Registry-independent install paths: npm tarball, AUR PKGBUILD bundle and
+# local WinGet manifests. They are uploaded to the same GitHub release so
+# users can install while AUR/npm/WinGet publication is pending or unavailable.
+echo "==> building direct-install package assets"
+bundle_dir=$(mktemp -d "${TMPDIR:-/tmp}/ddc-bundles.XXXXXX")
+trap 'rm -rf "$bundle_dir"' EXIT
+python3 packaging/bundle.py --program ddc --version "$ver" --out "$bundle_dir"
+gh release upload "v$ver" "$bundle_dir"/* --repo "$REPO" --clobber
+echo "==> uploaded npm tarball, AUR bundle and WinGet local manifests"
+
 # ---- 6. tap + scoop ----------------------------------------------------------
 echo "==> dispatching homebrew-tap + scoop-bucket updates"
 gh workflow run auto-update.yml --repo "$TAP_REPO"
 gh workflow run auto-update.yml --repo "$BUCKET_REPO"
 echo "    $TAP_REPO/actions (Auto-update formulae)"
 echo "    $BUCKET_REPO/actions (Auto-update manifests)"
-echo "    packaging channels ready:"
+echo "    direct-install assets uploaded:"
+echo "      npm install -g https://github.com/$REPO/releases/download/v$ver/ejfkdev-ddc-$ver.tgz"
+echo "      ddc-bin-$ver-1-aur.tar.gz (PKGBUILD + .SRCINFO)"
+echo "      ejfkdev.ddc-$ver-winget.zip (local manifests)"
+echo "    registry channels ready when credentials are available:"
 echo "      packaging/publish.sh aur --yes   # AUR ddc-bin"
 echo "      packaging/publish.sh npm --yes   # npm @ejfkdev/ddc"
 echo "      packaging/publish.sh winget      # WinGet PR instructions"

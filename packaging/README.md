@@ -16,21 +16,23 @@ the AUR, WinGet and npm renderers are already generic.
 | cargo-binstall | `[package.metadata.binstall]` in `crates/ddc-cli/Cargo.toml` | live and verified |
 | Homebrew | `ejfkdev/homebrew-tap` (separate repo, auto-updated) | live |
 | Scoop | `ejfkdev/scoop-bucket` (separate repo, auto-updated) | live |
-| Arch Linux / AUR | `packaging/aur/ddc-bin/` | generated, publish pending |
-| Windows Package Manager | `packaging/winget/` | generated, PR pending |
-| npm | `packaging/npm/ddc/` | generated, publish pending |
+| Arch Linux / AUR | `packaging/aur/ddc-bin/` | AUR pending; PKGBUILD bundle live |
+| Windows Package Manager | `packaging/winget/` | PR open, CLA pending; local zip live |
+| npm | `packaging/npm/ddc/` | npmjs pending; tarball live |
 | PyPI | — | deliberately not used |
 | Docker image | — | out of scope |
 | Nix | — | not yet; see below |
 | Chocolatey | — | not yet; Scoop already covers Windows |
 
-The three pending channels are complete and validated locally: the AUR
-PKGBUILD passes shell syntax checks and its `.SRCINFO` is generated from the
-same catalog, the WinGet manifests validate against the official JSON
-schemas, and the npm package was installed and executed end-to-end (including
-with install scripts disabled). Publishing requires credentials that live
-outside the repository: an AUR account with an SSH key, an npm login in the
-`@ejfkdev` scope, and a `microsoft/winget-pkgs` pull request.
+The registry channels are generated and validated locally: the AUR PKGBUILD
+passes shell syntax checks and its `.SRCINFO` is generated from the same
+catalog, the WinGet manifests validate against the official JSON schemas, and
+the npm package was installed and executed end-to-end (including with install
+scripts disabled). The registry-independent artifacts (npm tarball, AUR
+bundle, WinGet local manifests) are already attached to the v0.1.33 release.
+Registry publication requires credentials that live outside the repository:
+an AUR account with an SSH key, an npm login in the `@ejfkdev` scope, and a
+WinGet pull request with the Microsoft CLA accepted by the contributor.
 
 **Why no PyPI?** A Python wheel is the wrong container for a native binary:
 supporting six platforms means six platform-tagged wheels, each carrying the
@@ -44,6 +46,29 @@ UPX-packed ELF is fragile. The correct Nix package would build from source
 with `rustPlatform.buildRustPackage` and `cargoLock`, which is a separate
 piece of work from this prebuilt-binary catalog.
 
+## Direct-install assets
+
+Every release also ships registry-independent artifacts. These work today,
+without AUR/npm/WinGet credentials:
+
+- **npm tarball** — `ejfkdev-ddc-<version>.tgz`:
+  ```bash
+  npm install -g https://github.com/ejfkdev/ddc/releases/download/v<version>/ejfkdev-ddc-<version>.tgz
+  ```
+- **Arch bundle** — `ddc-bin-<version>-1-aur.tar.gz`:
+  ```bash
+  tar xzf ddc-bin-<version>-1-aur.tar.gz
+  cd ddc-bin && makepkg -si
+  ```
+- **WinGet local manifests** — `ejfkdev.ddc-<version>-winget.zip`:
+  unzip it, enable local manifests once as administrator
+  (`winget settings --enable LocalManifestFiles`), then
+  `winget install --manifest <extracted-directory>`.
+
+`packaging/bundle.py` builds all three plus `.sha256` files. `release.sh`
+uploads them to the release after the packaging manifests are committed, so
+future versions get the same direct-install paths automatically.
+
 ## Layout
 
 ```
@@ -51,6 +76,7 @@ packaging/
 ├── programs.toml              # catalog: programs, versions, targets, channels
 ├── checksums.toml             # generated: release asset SHA-256 and sizes
 ├── sync.py                    # generator + validator
+├── bundle.py                  # direct-install assets (npm / AUR / WinGet)
 ├── publish.sh                 # AUR / npm publisher, WinGet instructions
 ├── aur/ddc-bin/               # generated PKGBUILD + .SRCINFO
 ├── winget/manifests/          # generated WinGet 1.6.0 manifests
@@ -84,8 +110,9 @@ The release API must already have the assets for the catalog version.
 ## Release flow
 
 `scripts/release.sh` does this automatically after the release workflow turns
-green: it refreshes the digests, regenerates the manifests, and commits
-`packaging/`. The manual equivalent is:
+green: it refreshes the digests, regenerates the manifests, commits
+`packaging/`, and builds/uploads the direct-install assets. The manual
+equivalent is:
 
 ```bash
 python3 packaging/sync.py --refresh --program ddc
@@ -123,13 +150,21 @@ Then:
 The script validates the generated files, clones
 `ssh://aur@aur.archlinux.org/ddc-bin.git` (or initializes it on first
 publication), copies `PKGBUILD` and `.SRCINFO`, and pushes `master`. Without
-`--yes` it only prints what it would do.
+`--yes` it only prints what it would do. The same files are attached to each
+release as `ddc-bin-<version>-1-aur.tar.gz` for a manual `makepkg -si`
+install.
 
 ### Windows Package Manager (WinGet)
 
 The generated manifests are at
 `packaging/winget/manifests/e/ejfkdev/ddc/<version>/`. They are validated
-against the official v1.6.0 JSON schemas. Publish with either:
+against the official v1.6.0 JSON schemas. The release also carries
+`ejfkdev.ddc-<version>-winget.zip` for a local `winget install --manifest`
+while the community PR is pending. The PR
+([#466817](https://github.com/microsoft/winget-pkgs/pull/466817)) is blocked
+on the Microsoft CLA being accepted by the contributor; that is a personal
+legal agreement, not something the release automation can sign. Publish with
+either:
 
 **wingetcreate (Windows):**
 
@@ -154,7 +189,9 @@ The package is `@ejfkdev/ddc`, a 3 kB wrapper. Its `postinstall` downloads the
 release binary for the current platform and verifies the embedded SHA-256; the
 `ddc` launcher then executes the native binary. If install scripts are
 disabled (or npm blocks them), the launcher downloads on first use instead.
-The unscoped `ddc` name is already taken on npm, hence the scope.
+The unscoped `ddc` name is already taken on npm, hence the scope. Until the
+registry publication happens, the same tarball is attached to each release;
+see [Direct-install assets](#direct-install-assets).
 
 One-time setup: sign in with `npm login` and make sure the `@ejfkdev` scope is
 available to the account (create the npm organization if needed).
@@ -195,8 +232,10 @@ end-to-end against v0.1.33.
 `sync.py --check` verifies every generated byte, rejects stale WinGet version
 directories, runs `bash -n` on the PKGBUILD, parses every WinGet YAML, checks
 JavaScript syntax with `node --check`, and parses `package.json`.
-`.github/workflows/packaging.yml` runs the same check on packaging changes and
-also runs `npm pack --dry-run`.
+`packaging/bundle.py` additionally builds the npm tarball, AUR bundle and
+WinGet zip and refuses to publish an npm tarball that accidentally contains a
+downloaded binary. `.github/workflows/packaging.yml` runs the same checks on
+packaging changes, builds the bundles, and runs `npm pack --dry-run`.
 
 The WinGet manifests were additionally validated against the official
 `manifest.version.1.6.0`, `manifest.defaultLocale.1.6.0` and

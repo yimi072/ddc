@@ -32,6 +32,9 @@ jobs:
       - name: Check generator and manifests
         run: python3 packaging/sync.py --check
 
+      - name: Python syntax
+        run: python3 -m py_compile packaging/sync.py packaging/bundle.py
+
       - name: Shell syntax
         run: |
           bash -n packaging/publish.sh
@@ -41,3 +44,9 @@ jobs:
       - name: npm package dry run
         working-directory: packaging/npm/ddc
         run: npm pack --dry-run
+
+      - name: Build direct-install assets
+        run: |
+          out="$RUNNER_TEMP/ddc-bundles"
+          python3 packaging/bundle.py --program ddc --out "$out"
+          ls -l "$out"

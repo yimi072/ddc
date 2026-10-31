@@ -83,9 +83,10 @@ macOS 平台已 UPX 压缩。
 
 **其他包渠道**：Arch（AUR `ddc-bin`）、Windows Package Manager
 （`ejfkdev.ddc`）与 npm（`@ejfkdev/ddc`）的清单在
-[`packaging/`](packaging/) 中生成；AUR、WinGet、npm 尚待发布（状态与命令
-见 [packaging/README.zh-CN.md](packaging/README.zh-CN.md)）。catalog 支持
-多个二进制程序，后续程序可复用同一套渠道。
+[`packaging/`](packaging/) 中生成。包仓库发布尚待账号，但每个 release 都
+附带可直接安装的产物（npm tarball、Arch PKGBUILD 包、WinGet 本地清单）；
+状态与命令见 [packaging/README.zh-CN.md](packaging/README.zh-CN.md)。
+catalog 支持多个二进制程序，后续程序可复用同一套渠道。
 
 **源码构建**（Rust stable）：
 
